@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,7 +16,30 @@ interface WaterfallVisualizationDemoProps {
 }
 
 export default function WaterfallVisualizationDemo({ data: initialData }: WaterfallVisualizationDemoProps) {
-  const [data, setData] = useState(initialData)
+  const [data, setData] = useState<AnalysisData>(() => {
+    console.log("Initial data received:", JSON.stringify(initialData, null, 2))
+    // Ensure user_feedback fields are initialized properly
+    const processedData = {
+      ...initialData,
+      impacts: initialData.impacts.map(impact => {
+        const processedImpact = {
+          ...impact,
+          user_feedback: {
+            thumbs_up: typeof impact.user_feedback?.thumbs_up === 'number' ? impact.user_feedback.thumbs_up : 0,
+            thumbs_down: typeof impact.user_feedback?.thumbs_down === 'number' ? impact.user_feedback.thumbs_down : 0
+          }
+        }
+        console.log("Processing impact:", {
+          impacted_entity: impact.impacted_entity,
+          original_feedback: impact.user_feedback,
+          processed_feedback: processedImpact.user_feedback
+        })
+        return processedImpact
+      })
+    }
+    console.log("Processed initial data:", JSON.stringify(processedData, null, 2))
+    return processedData
+  })
   const [expandedImpacts, setExpandedImpacts] = useState<Set<string>>(new Set())
   const [showAddImpact, setShowAddImpact] = useState(false)
   const [showAddEvidence, setShowAddEvidence] = useState(false)
@@ -72,21 +95,45 @@ export default function WaterfallVisualizationDemo({ data: initialData }: Waterf
   }
 
   const handleVote = (impactId: string, voteType: "up" | "down") => {
-    setData((prevData) => ({
-      ...prevData,
-      impacts: prevData.impacts.map((impact, index) =>
-        index === parseInt(impactId)
-          ? {
+    console.log("Handling vote - Before update:", {
+      impactId,
+      voteType,
+      currentData: data,
+      targetImpact: data.impacts.find(imp => imp.impacted_entity === impactId)
+    })
+    
+    setData((prevData) => {
+      const newData = {
+        ...prevData,
+        impacts: prevData.impacts.map((impact) => {
+          if (impact.impacted_entity === impactId) {
+            // Ensure we have a user_feedback object
+            const currentFeedback = impact.user_feedback || { thumbs_up: 0, thumbs_down: 0 }
+            const currentThumbsUp = typeof currentFeedback.thumbs_up === 'number' ? currentFeedback.thumbs_up : 0
+            const currentThumbsDown = typeof currentFeedback.thumbs_down === 'number' ? currentFeedback.thumbs_down : 0
+            
+            // Create a new impact object with updated user_feedback
+            const updatedImpact = {
               ...impact,
               user_feedback: {
-                ...impact.user_feedback,
-                [voteType === "up" ? "thumbs_up" : "thumbs_down"]:
-                  impact.user_feedback[voteType === "up" ? "thumbs_up" : "thumbs_down"] + 1,
-              },
+                thumbs_up: voteType === "up" ? currentThumbsUp + 1 : currentThumbsUp,
+                thumbs_down: voteType === "down" ? currentThumbsDown + 1 : currentThumbsDown
+              }
             }
-          : impact,
-      ),
-    }))
+            
+            console.log("Updating impact:", {
+              impacted_entity: impact.impacted_entity,
+              before: { up: currentThumbsUp, down: currentThumbsDown },
+              after: { up: updatedImpact.user_feedback.thumbs_up, down: updatedImpact.user_feedback.thumbs_down }
+            })
+            return updatedImpact
+          }
+          return impact
+        }),
+      }
+      console.log("New data after vote:", JSON.stringify(newData, null, 2))
+      return newData
+    })
   }
 
   const showArticleContent = async () => {
@@ -281,6 +328,9 @@ function ImpactCard({
   onAddEvidence,
   onSourceClick,
 }: ImpactCardProps) {
+  // Remove the evidence fetching state and effect since we have the data directly
+  const evidenceData = impact.supporting_evidence || []
+
   const getScoreColor = (score: number) => {
     if (score <= -0.5) return "bg-red-600"
     if (score < 0) return "bg-red-400"
@@ -337,10 +387,14 @@ function ImpactCard({
 
   return (
     <Card
-      className={`cursor-pointer transition-all duration-200 ${getCardStyles(impact.score)}`}
-      onClick={onToggleExpanded}
+      className={`transition-all duration-200 ${
+        isExpanded ? "shadow-md" : "hover:shadow-sm"
+      }`}
     >
-      <CardHeader className="pb-3">
+      <CardHeader
+        className={`p-4 cursor-pointer ${getCardStyles(impact.score)}`}
+        onClick={onToggleExpanded}
+      >
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
@@ -376,7 +430,7 @@ function ImpactCard({
               }}
             >
               <ThumbsUp className="h-3 w-3 mr-1" />
-              {impact.user_feedback.thumbs_up}
+              {impact.user_feedback?.thumbs_up || 0}
             </Button>
             <Button
               size="sm"
@@ -387,7 +441,7 @@ function ImpactCard({
               }}
             >
               <ThumbsDown className="h-3 w-3 mr-1" />
-              {impact.user_feedback.thumbs_down}
+              {impact.user_feedback?.thumbs_down || 0}
             </Button>
           </div>
         </div>
@@ -412,25 +466,33 @@ function ImpactCard({
                 </Button>
               </div>
 
-              {impact.supporting_evidence && impact.supporting_evidence.length > 0 ? (
-                <ul className="space-y-3">
-                  {impact.supporting_evidence.map((evidence, evidenceIndex) => (
-                    <li key={evidenceIndex} className={`text-sm p-2 rounded ${getEvidenceStyles(impact.score)}`}>
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="flex-1">{evidence.description}</p>
-                        <div className="flex items-center space-x-1 ml-3">{renderSourceBadge(evidence.source)}</div>
+              {evidenceData.length > 0 ? (
+                <ul className="space-y-2">
+                  {evidenceData.map((evidence, evidenceIndex) => (
+                    <li
+                      key={evidenceIndex}
+                      className={`text-sm p-2 rounded ${getEvidenceStyles(impact.score)}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <p className="leading-tight">{evidence.description}</p>
+                          {evidence.source_url && (
+                            <a
+                              href={evidence.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center text-blue-600 hover:underline text-xs whitespace-nowrap"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <ExternalLink className="h-3 w-3 mr-1" />
+                              Source
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-1 ml-2">
+                          {renderSourceBadge(evidence.source)}
+                        </div>
                       </div>
-                      {evidence.source_url && (
-                        <a
-                          href={evidence.source_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center text-blue-600 hover:underline text-sm"
-                        >
-                          <ExternalLink className="h-3 w-3 mr-1" />
-                          Source
-                        </a>
-                      )}
                     </li>
                   ))}
                 </ul>

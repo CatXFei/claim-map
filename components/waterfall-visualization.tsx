@@ -81,8 +81,10 @@ export default function WaterfallVisualization({ article, impacts: initialImpact
         impact.id === impactId
           ? {
               ...impact,
-              user_votes_up: voteType === "up" ? impact.user_votes_up + 1 : impact.user_votes_up,
-              user_votes_down: voteType === "down" ? impact.user_votes_down + 1 : impact.user_votes_down
+              user_feedback: {
+                thumbs_up: voteType === "up" ? (impact.user_feedback?.thumbs_up || 0) + 1 : (impact.user_feedback?.thumbs_up || 0),
+                thumbs_down: voteType === "down" ? (impact.user_feedback?.thumbs_down || 0) + 1 : (impact.user_feedback?.thumbs_down || 0)
+              }
             }
           : impact
       )
@@ -102,8 +104,10 @@ export default function WaterfallVisualization({ article, impacts: initialImpact
             impact.id === impactId
               ? {
                   ...impact,
-                  user_votes_up: voteType === "up" ? impact.user_votes_up - 1 : impact.user_votes_up,
-                  user_votes_down: voteType === "down" ? impact.user_votes_down - 1 : impact.user_votes_down
+                  user_feedback: {
+                    thumbs_up: voteType === "up" ? (impact.user_feedback?.thumbs_up || 0) - 1 : (impact.user_feedback?.thumbs_up || 0),
+                    thumbs_down: voteType === "down" ? (impact.user_feedback?.thumbs_down || 0) - 1 : (impact.user_feedback?.thumbs_down || 0)
+                  }
                 }
               : impact
           )
@@ -130,8 +134,10 @@ export default function WaterfallVisualization({ article, impacts: initialImpact
           impact.id === impactId
             ? {
                 ...impact,
-                user_votes_up: voteType === "up" ? impact.user_votes_up - 1 : impact.user_votes_up,
-                user_votes_down: voteType === "down" ? impact.user_votes_down - 1 : impact.user_votes_down
+                user_feedback: {
+                  thumbs_up: voteType === "up" ? (impact.user_feedback?.thumbs_up || 0) - 1 : (impact.user_feedback?.thumbs_up || 0),
+                  thumbs_down: voteType === "down" ? (impact.user_feedback?.thumbs_down || 0) - 1 : (impact.user_feedback?.thumbs_down || 0)
+                }
               }
             : impact
         )
@@ -427,34 +433,8 @@ function ImpactCard({
   getEvidenceStyles,
   onSourceClick,
 }: ImpactCardProps) {
-  const [evidenceData, setEvidenceData] = useState<Evidence[]>([])
-  const [isLoadingEvidence, setIsLoadingEvidence] = useState(false)
-
-  useEffect(() => {
-    async function fetchEvidence() {
-      if (isExpanded && impact.supporting_evidence_ids.length > 0) {
-        setIsLoadingEvidence(true)
-        try {
-          const evidencePromises = impact.supporting_evidence_ids.map(async (id) => {
-            const response = await fetch(`/api/evidence/${id}`)
-            if (!response.ok) {
-              console.error(`Failed to fetch evidence ${id}:`, await response.text())
-              return null
-            }
-            return response.json()
-          })
-          const evidence = await Promise.all(evidencePromises)
-          setEvidenceData(evidence.filter((ev): ev is Evidence => ev !== null))
-        } catch (error) {
-          console.error('Error fetching evidence:', error)
-        } finally {
-          setIsLoadingEvidence(false)
-        }
-      }
-    }
-
-    fetchEvidence()
-  }, [isExpanded, impact.supporting_evidence_ids])
+  // Use evidence data directly from the impact
+  const evidenceData = impact.supporting_evidence || []
 
   const cardStyles = getCardStyles(impact.score, impact.source)
 
@@ -503,7 +483,7 @@ function ImpactCard({
                   className="h-2.5 px-0.5 text-green-600 hover:text-green-700"
                 >
                   <ThumbsUp className="h-1 w-1 mr-0.5" />
-                  {impact.user_votes_up}
+                  {impact.user_feedback?.thumbs_up || 0}
                 </Button>
                 <Button
                   variant="ghost"
@@ -515,7 +495,7 @@ function ImpactCard({
                   className="h-2.5 px-0.5 text-red-600 hover:text-red-700"
                 >
                   <ThumbsDown className="h-1 w-1 mr-0.5" />
-                  {impact.user_votes_down}
+                  {impact.user_feedback?.thumbs_down || 0}
                 </Button>
               </div>
             </div>
@@ -565,9 +545,7 @@ function ImpactCard({
                 </Button>
               </div>
 
-              {isLoadingEvidence ? (
-                <p className="text-xs text-muted-foreground">Loading evidence...</p>
-              ) : evidenceData.length > 0 ? (
+              {evidenceData.length > 0 ? (
                 <ul className="space-y-1.5">
                   {evidenceData.map((evidence, evidenceIndex) => (
                     <li key={evidenceIndex} className={`text-[11px] p-1.5 rounded ${getEvidenceStyles(impact.score, evidence.source)}`}>

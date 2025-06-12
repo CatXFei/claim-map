@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
 import type { AnalysisData } from "@/types/analysis"
+import { useAuth } from "@/lib/auth-context"
 
 interface ArticleInputProps {
   onAnalysisComplete: (articleId: string) => void
@@ -17,6 +18,7 @@ export default function ArticleInput({ onAnalysisComplete }: ArticleInputProps) 
   const [content, setContent] = useState("")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { user } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -27,15 +29,23 @@ export default function ArticleInput({ onAnalysisComplete }: ArticleInputProps) 
       return
     }
 
+    if (!user) {
+      setError("Please sign in to analyze content")
+      return
+    }
+
     setIsAnalyzing(true)
     console.log("=== Starting article analysis ===")
     console.log("Content to analyze:", content.trim())
 
     try {
+      // Get the current user's ID token
+      const token = await user.getIdToken()
+      
       // Always call the analyze API
       console.log("Preparing API request...")
       const requestBody = JSON.stringify({ 
-        article: content.trim()
+        content: content.trim()
       })
       console.log("Request body:", requestBody)
 
@@ -44,7 +54,8 @@ export default function ArticleInput({ onAnalysisComplete }: ArticleInputProps) 
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "Accept": "application/json"
+          "Accept": "application/json",
+          "Authorization": `Bearer ${token}`
         },
         body: requestBody
       })
@@ -59,9 +70,9 @@ export default function ArticleInput({ onAnalysisComplete }: ArticleInputProps) 
         throw new Error(result.error || `Analysis failed: ${response.status}`)
       }
 
-      if (result.article_id) {
-        console.log("Analysis successful, article ID:", result.article_id)
-        onAnalysisComplete(result.article_id.toString())
+      if (result.articleId) {
+        console.log("Analysis successful, article ID:", result.articleId)
+        onAnalysisComplete(result.articleId.toString())
         setContent("")
       } else {
         throw new Error("No article ID returned from analysis")
@@ -98,12 +109,14 @@ export default function ArticleInput({ onAnalysisComplete }: ArticleInputProps) 
             )}
           </div>
 
-          <Button type="submit" disabled={isAnalyzing} className="w-full">
+          <Button type="submit" disabled={isAnalyzing || !user} className="w-full">
             {isAnalyzing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Analyzing...
               </>
+            ) : !user ? (
+              "Please Sign In to Analyze"
             ) : (
               "Analyze Content"
             )}

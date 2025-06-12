@@ -135,8 +135,10 @@ export async function createImpact(
       score,
       confidence,
       source,
-      user_votes_up: 0,
-      user_votes_down: 0,
+      user_feedback: {
+        thumbs_up: 0,
+        thumbs_down: 0
+      },
       supporting_evidence_ids: [], // Initialize empty evidence IDs array
       created_at: new Date(),
       updated_at: new Date(),
@@ -170,7 +172,6 @@ export async function createImpact(
 
 export async function voteOnImpact(impactId: string, voteType: 'up' | 'down'): Promise<void> {
   const impactRef = db.collection('impacts').doc(impactId)
-  const voteField = voteType === 'up' ? 'user_votes_up' : 'user_votes_down'
 
   await db.runTransaction(async (transaction) => {
     const impactDoc = await transaction.get(impactRef)
@@ -178,9 +179,16 @@ export async function voteOnImpact(impactId: string, voteType: 'up' | 'down'): P
       throw new Error('Impact not found')
     }
 
-    const currentVotes = impactDoc.data()?.[voteField] || 0
+    const data = impactDoc.data()
+    const currentFeedback = data?.user_feedback || { thumbs_up: 0, thumbs_down: 0 }
+    const currentThumbsUp = typeof currentFeedback.thumbs_up === 'number' ? currentFeedback.thumbs_up : 0
+    const currentThumbsDown = typeof currentFeedback.thumbs_down === 'number' ? currentFeedback.thumbs_down : 0
+
     transaction.update(impactRef, {
-      [voteField]: currentVotes + 1,
+      user_feedback: {
+        thumbs_up: voteType === 'up' ? currentThumbsUp + 1 : currentThumbsUp,
+        thumbs_down: voteType === 'down' ? currentThumbsDown + 1 : currentThumbsDown
+      },
       updated_at: new Date(),
     })
   })
@@ -461,9 +469,13 @@ export interface Impact {
   score: number
   confidence: number | null
   source: string
-  user_votes_up: number
-  user_votes_down: number
-  supporting_evidence_ids: string[] // Store evidence IDs instead of full evidence objects
+  user_feedback: {
+    thumbs_up: number
+    thumbs_down: number
+  }
+  supporting_evidence_ids: string[]
+  supporting_evidence?: Evidence[]
+  legacy_supporting_evidence?: Evidence[]
   created_at: Date
   updated_at: Date
 }
@@ -513,8 +525,10 @@ export async function storeAnalysisData(articleId: string, analysisData: any): P
       score: impact.score,
       confidence: impact.confidence,
       source: impact.source || "system",
-      user_votes_up: 0,
-      user_votes_down: 0,
+      user_feedback: {
+        thumbs_up: 0,
+        thumbs_down: 0
+      },
       supporting_evidence_ids: evidenceIds,
       created_at: new Date(),
       updated_at: new Date()

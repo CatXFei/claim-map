@@ -15,12 +15,12 @@ export interface Impact {
   impact: string
   score: number
   confidence: number | null
-  user_votes_up: number
-  user_votes_down: number
   source: string
-  supporting_evidence_ids: string[]
-  supporting_evidence?: Evidence[]
-  legacy_supporting_evidence?: Evidence[]
+  user_feedback: {
+    thumbs_up: number
+    thumbs_down: number
+  }
+  supporting_evidence: Evidence[]
   created_at: Date
   updated_at: Date
 }

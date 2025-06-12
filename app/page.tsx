@@ -8,6 +8,8 @@ import { AnalysisSidebar } from "@/components/analysis-sidebar"
 import { AppHeader } from "@/components/app-header"
 import type { Article, Impact } from "@/lib/database"
 import type { AnalysisData } from "@/types/analysis"
+import { useSearchParams } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
 
 export default function HomePage() {
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null)
@@ -16,6 +18,19 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showInput, setShowInput] = useState(true)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const searchParams = useSearchParams()
+  const isDemoMode = searchParams.get("demo") === "true"
+  const { user } = useAuth()
+
+  // Clear analysis data when user signs out
+  useEffect(() => {
+    if (!user) {
+      setCurrentAnalysisId(null)
+      setArticle(null)
+      setImpacts([])
+      setShowInput(true)
+    }
+  }, [user])
 
   // Add useEffect to log article state changes
   useEffect(() => {
@@ -122,11 +137,27 @@ export default function HomePage() {
                 </div>
               </div>
             ) : currentAnalysisId && article ? (
-              <WaterfallVisualization 
-                article={article} 
-                impacts={impacts} 
-                onRefresh={handleRefresh} 
-              />
+              isDemoMode ? (
+                <WaterfallVisualizationDemo 
+                  data={{
+                    article_title: article.title,
+                    article_url: article.url || "",
+                    article_id: parseInt(article.id) || 0,
+                    impacting_entity: article.impacting_entity,
+                    impacts: impacts.map(impact => ({
+                      ...impact,
+                      supporting_evidence: impact.supporting_evidence || []
+                    }))
+                  }}
+                  onRefresh={handleRefresh}
+                />
+              ) : (
+                <WaterfallVisualization 
+                  article={article} 
+                  impacts={impacts} 
+                  onRefresh={handleRefresh} 
+                />
+              )
             ) : (
               <div className="flex items-center justify-center h-64">
                 <div className="text-center text-muted-foreground">

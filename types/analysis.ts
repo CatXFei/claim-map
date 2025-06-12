@@ -21,6 +21,6 @@ export interface Impact {
 
 export interface Evidence {
   description: string
-  source_url: string
+  source_url?: string
   source: string // Either 'user' or '/article/{id}' for article reference
 }

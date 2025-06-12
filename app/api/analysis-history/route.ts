@@ -1,46 +1,30 @@
-import { NextResponse } from "next/server"
-import { db } from "@/lib/firebase-admin"
+import { NextRequest } from 'next/server'
+import { getAuth } from 'firebase-admin/auth'
+import { getAnalysesByUser } from '@/lib/database-server'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    console.log("Fetching analysis history...")
-    const historySnapshot = await db.collection("analysis_history").orderBy("created_at", "desc").get()
+    // Get the authorization header
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      // Return empty array if no auth token
+      return Response.json({ analyses: [] })
+    }
+
+    // Get the token
+    const token = authHeader.split('Bearer ')[1]
     
-    // Get all article IDs from history
-    const articleIds = historySnapshot.docs.map(doc => doc.data().article_id)
-    console.log("Found article IDs:", articleIds)
+    // Verify the token and get the user
+    const decodedToken = await getAuth().verifyIdToken(token)
+    const userId = decodedToken.uid
 
-    // Fetch impact counts for each article
-    const impactCounts = await Promise.all(
-      articleIds.map(async (articleId) => {
-        const impactsSnapshot = await db.collection("impacts").where("article_id", "==", articleId).count().get()
-        return { articleId, count: impactsSnapshot.data().count }
-      })
-    )
-
-    // Create a map of article ID to impact count
-    const impactCountMap = Object.fromEntries(
-      impactCounts.map(({ articleId, count }) => [articleId, count])
-    )
-
-    // Combine history entries with impact counts
-    const history = historySnapshot.docs.map(doc => {
-      const data = doc.data()
-      return {
-        id: doc.id,
-        article_id: data.article_id,
-        created_at: data.created_at.toDate().toISOString(),
-        impact_count: impactCountMap[data.article_id] || 0
-      }
-    })
-
-    console.log("Returning history with impact counts:", history)
-    return NextResponse.json(history)
+    // Get analyses for this user
+    const analyses = await getAnalysesByUser(userId)
+    
+    return Response.json({ analyses })
   } catch (error) {
-    console.error("Failed to fetch analysis history:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch analysis history" },
-      { status: 500 }
-    )
+    console.error('Error fetching analysis history:', error)
+    // Return empty array on error
+    return Response.json({ analyses: [] })
   }
 }

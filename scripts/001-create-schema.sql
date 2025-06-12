@@ -18,8 +18,7 @@ CREATE TABLE IF NOT EXISTS impacts (
   impact TEXT NOT NULL,
   score DECIMAL(3,2) CHECK (score >= -1 AND score <= 1),
   confidence DECIMAL(3,2) CHECK (confidence >= 0 AND confidence <= 1),
-  user_votes_up INTEGER DEFAULT 0,
-  user_votes_down INTEGER DEFAULT 0,
+  user_feedback JSONB DEFAULT '{"thumbs_up": 0, "thumbs_down": 0}'::jsonb,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

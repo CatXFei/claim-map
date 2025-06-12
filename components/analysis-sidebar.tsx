@@ -6,20 +6,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Plus, Clock, Trash2, Check } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { Badge } from "@/components/ui/badge"
-
-interface AnalysisHistoryEntry {
-  id: string
-  article_id: string
-  created_at: string
-  impact_count: number
-}
-
-interface Article {
-  id: string
-  title: string
-  content: string
-  created_at: string
-}
+import { useAuth } from "@/lib/auth-context"
+import type { AnalysisHistoryWithArticle } from "@/lib/database-server"
 
 interface AnalysisSidebarProps {
   currentAnalysisId: string | null
@@ -28,46 +16,77 @@ interface AnalysisSidebarProps {
   refreshTrigger?: number
 }
 
+// Add a helper function to safely format dates
+function formatDate(date: Date | string | undefined | null): string {
+  if (!date) {
+    console.log("formatDate received null or undefined date")
+    return "Unknown date"
+  }
+  
+  try {
+    console.log("formatDate received date:", date, "type:", typeof date)
+    
+    // If it's already a Date object, use it directly
+    const dateObj = date instanceof Date ? date : new Date(date)
+    console.log("Converted to date object:", dateObj, "isValid:", !isNaN(dateObj.getTime()))
+    
+    if (isNaN(dateObj.getTime())) {
+      console.error("Invalid date:", date, "type:", typeof date)
+      return "Invalid date"
+    }
+    const formatted = formatDistanceToNow(dateObj, { addSuffix: true })
+    console.log("Formatted date:", formatted)
+    return formatted
+  } catch (error) {
+    console.error("Error formatting date:", error, "Date:", date, "type:", typeof date)
+    return "Invalid date"
+  }
+}
+
 export function AnalysisSidebar({
   currentAnalysisId,
   onSelectAnalysis,
   onNewAnalysis,
   refreshTrigger = 0,
 }: AnalysisSidebarProps) {
-  const [history, setHistory] = useState<AnalysisHistoryEntry[]>([])
-  const [articles, setArticles] = useState<Record<string, Article>>({})
+  const [history, setHistory] = useState<AnalysisHistoryWithArticle[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(currentAnalysisId)
+  const { user } = useAuth()
 
   // Update selectedId when currentAnalysisId changes from parent
   useEffect(() => {
     setSelectedId(currentAnalysisId)
   }, [currentAnalysisId])
 
-  // Fetch history and articles only on initial load or when refreshTrigger changes
+  // Fetch history only on initial load or when refreshTrigger changes
   const fetchData = useCallback(async () => {
+    if (!user) {
+      setHistory([])
+      setIsLoading(false)
+      return
+    }
+
     // Only fetch if we don't have data yet or if refreshTrigger is greater than 0
     if (history.length === 0 || refreshTrigger > 0) {
       setIsLoading(true)
       try {
+        // Get the current user's ID token
+        const token = await user.getIdToken()
+
         // Fetch history
-        const historyResponse = await fetch("/api/analysis-history")
+        const historyResponse = await fetch("/api/analysis-history", {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
         if (!historyResponse.ok) throw new Error("Failed to fetch history")
         const historyData = await historyResponse.json()
-        setHistory(historyData)
-
-        // Fetch articles for each history entry
-        const articlePromises = historyData.map(async (entry: AnalysisHistoryEntry) => {
-          const response = await fetch(`/api/articles/${entry.article_id}`)
-          if (!response.ok) throw new Error(`Failed to fetch article ${entry.article_id}`)
-          const data = await response.json()
-          return [entry.article_id, data.article]
-        })
+        console.log("Raw analysis history data:", JSON.stringify(historyData.analyses, null, 2))
         
-        const articleResults = await Promise.all(articlePromises)
-        const articlesMap = Object.fromEntries(articleResults)
-        setArticles(articlesMap)
+        // The dates should already be Date objects from the server
+        setHistory(historyData.analyses)
       } catch (error) {
         console.error("Failed to fetch analysis history:", error)
         setError(error instanceof Error ? error.message : "Failed to fetch analysis history")
@@ -75,7 +94,7 @@ export function AnalysisSidebar({
         setIsLoading(false)
       }
     }
-  }, [history.length, refreshTrigger])
+  }, [history.length, refreshTrigger, user])
 
   // Initial fetch
   useEffect(() => {
@@ -88,10 +107,17 @@ export function AnalysisSidebar({
   }
 
   const handleDelete = async (historyId: string, articleId: string) => {
+    if (!user) return
+
     try {
+      const token = await user.getIdToken()
+
       // Delete from history
       const response = await fetch(`/api/analysis-history/${historyId}`, {
-        method: "DELETE"
+        method: "DELETE",
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       })
       
       if (!response.ok) {
@@ -100,7 +126,10 @@ export function AnalysisSidebar({
 
       // Delete the article and its impacts
       const articleResponse = await fetch(`/api/articles/${articleId}`, {
-        method: "DELETE"
+        method: "DELETE",
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       })
       
       if (!articleResponse.ok) {
@@ -110,10 +139,6 @@ export function AnalysisSidebar({
       // Update local state
       const updatedHistory = history.filter(entry => entry.id !== historyId)
       setHistory(updatedHistory)
-      setArticles(prev => {
-        const { [articleId]: _, ...rest } = prev
-        return rest
-      })
 
       // Handle selection of next analysis
       if (selectedId === articleId) {
@@ -121,7 +146,7 @@ export function AnalysisSidebar({
           const currentIndex = history.findIndex(entry => entry.id === historyId)
           const nextIndex = Math.min(currentIndex, updatedHistory.length - 1)
           const nextAnalysis = updatedHistory[nextIndex]
-          handleSelect(nextAnalysis.article_id)
+          handleSelect(nextAnalysis.articleId)
         } else {
           onNewAnalysis()
         }
@@ -150,12 +175,11 @@ export function AnalysisSidebar({
             {error}
           </div>
         ) : history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No analysis history yet</p>
+          <p className="text-sm text-muted-foreground">No analysis history yet. Please sign in to see your analysis history.</p>
         ) : (
           <div className="space-y-2">
             {history.map((entry) => {
-              const article = articles[entry.article_id]
-              const isSelected = selectedId === entry.article_id
+              const isSelected = selectedId === entry.articleId
               return (
                 <div
                   key={entry.id}
@@ -164,26 +188,26 @@ export function AnalysisSidebar({
                       ? "bg-muted border-muted-foreground/20 shadow-sm hover:bg-muted/90" 
                       : "hover:bg-accent/50 border-border bg-background"
                   }`}
-                  onClick={() => handleSelect(entry.article_id)}
+                  onClick={() => handleSelect(entry.articleId)}
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
                       <h3 className={`font-medium text-sm line-clamp-2 ${
                         isSelected ? "text-foreground" : "text-muted-foreground"
                       }`}>
-                        {article?.title || "Loading..."}
+                        {entry.article.title}
                       </h3>
                       <div className="flex items-center justify-between mt-2">
                         <Badge 
                           variant="secondary" 
                           className={`text-xs ${isSelected ? "opacity-70" : ""}`}
                         >
-                          {entry.impact_count} {entry.impact_count === 1 ? "argument" : "arguments"}
+                          {entry.impactCount} {entry.impactCount === 1 ? "argument" : "arguments"}
                         </Badge>
                         <p className={`text-xs ${
                           isSelected ? "text-foreground/70" : "text-muted-foreground"
                         }`}>
-                          {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}
+                          {formatDate(entry.createdAt)}
                         </p>
                       </div>
                     </div>
@@ -195,7 +219,7 @@ export function AnalysisSidebar({
                       }`}
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleDelete(entry.id, entry.article_id)
+                        handleDelete(entry.id, entry.articleId)
                       }}
                     >
                       <Trash2 className="h-4 w-4" />

@@ -1,43 +1,26 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/firebase-admin"
+import { getAuth } from "firebase-admin/auth"
+import * as admin from "firebase-admin"
+import type { AnalysisData } from "@/types/analysis"
 import aiHealthcareAnalysis from "@/data/ai-healthcare-analysis.json"
 import tariffAnalysis from "@/data/tariff-analysis.json"
 import OpenAI from "openai"
+import { storeAnalysisData } from "@/lib/database-server"
 
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
-interface AnalysisData {
-  article_title: string
-  article_content: string
-  impacts: Array<{
-    impacted_entity: string
-    impact: string
-    score: number
-    confidence: number
-    source?: string
-    supporting_evidence: Array<{
-      description: string
-      source_url: string
-      source: string
-    }>
-    user_feedback: {
-      thumbs_up: number
-      thumbs_down: number
-    }
-  }>
-}
-
 // Helper function to get hardcoded analysis data
 function getHardcodedAnalysis(content: string): AnalysisData | null {
   const lowerContent = content.toLowerCase()
   if (lowerContent.includes("ai healthcare") || lowerContent.includes("ai in healthcare")) {
-    return aiHealthcareAnalysis as AnalysisData
+    return aiHealthcareAnalysis as unknown as AnalysisData
   }
   if (lowerContent.includes("tariff")) {
-    return tariffAnalysis as AnalysisData
+    return tariffAnalysis as unknown as AnalysisData
   }
   return null
 }
@@ -58,24 +41,29 @@ For each impact, identify:
 4. A confidence score from 0 to 1
 5. Supporting evidence from the text
 
-Article content:
-${content}
+Important: For supporting evidence:
+- Only include source_url if the article content explicitly provides a link
+- If no link is provided in the article content, leave source_url empty
+- Do not generate or make up source URLs
+- Focus on factual evidence from the provided content
 
 Provide the analysis in the following JSON format:
 {
-  "article_title": "A concise title summarizing the main topic",
-  "article_content": "The original article content",
+  "article_title": "string",
+  "article_url": "string",
+  "article_id": number,
+  "impacting_entity": "string",
   "impacts": [
     {
-      "impacted_entity": "The entity or group being impacted",
-      "impact": "A clear description of how they are impacted",
-      "score": -1 to 1,
-      "confidence": 0 to 1,
+      "impacted_entity": "string",
+      "impact": "string",
+      "score": number,
+      "confidence": number,
       "source": "system",
       "supporting_evidence": [
         {
-          "description": "A specific quote or evidence from the text",
-          "source_url": "",
+          "description": "string",
+          "source_url": "string",
           "source": "system"
         }
       ],
@@ -87,39 +75,45 @@ Provide the analysis in the following JSON format:
   ]
 }
 
-Ensure each impact has at least one piece of supporting evidence from the text.`
+Article content:
+${content}`
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+    const response = await openai.chat.completions.create({
+      model: "gpt-4-turbo-preview",
       messages: [
         {
           role: "system",
-          content: "You are an expert analyst that identifies and structures impacts from text content. You provide balanced analysis with both positive and negative impacts when present."
+          content: "You are an expert analyst that provides structured analysis of article impacts. Focus on factual, evidence-based analysis."
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      response_format: { type: "json_object" },
       temperature: 0.7,
       max_tokens: 2000
     })
 
-    console.log("OpenAI API response received")
-    
-    const responseContent = completion.choices[0]?.message?.content
+    const responseContent = response.choices[0]?.message?.content
     if (!responseContent) {
       throw new Error("No content in OpenAI response")
     }
 
-    // Parse the JSON response
-    const analysisData = JSON.parse(responseContent) as AnalysisData
+    console.log("OpenAI API response received:", responseContent)
+
+    // Clean the response content by removing markdown code block formatting
+    const cleanedContent = responseContent
+      .replace(/```json\n?/g, '') // Remove opening ```json
+      .replace(/```\n?/g, '')     // Remove closing ```
+      .trim()                     // Remove any extra whitespace
+
+    // Parse the cleaned JSON response
+    const analysisData = JSON.parse(cleanedContent) as AnalysisData
     
     // Validate the response structure
     if (!analysisData.article_title || !analysisData.impacts || !Array.isArray(analysisData.impacts)) {
-      throw new Error("Invalid response structure from OpenAI")
+      throw new Error("Invalid analysis data structure")
     }
 
     // Ensure each impact has the required fields
@@ -147,28 +141,28 @@ Ensure each impact has at least one piece of supporting evidence from the text.`
 }
 
 export async function POST(request: Request) {
-  console.log("=== Analyze API called ===")
-  let articleRef: FirebaseFirestore.DocumentReference | undefined
-
+  let articleRef: admin.firestore.DocumentReference | null = null
   try {
-    // Log the raw request
-    const rawBody = await request.text()
-    console.log("Raw request body:", rawBody)
-    
-    // Parse the JSON
-    const body = JSON.parse(rawBody)
-    const { article } = body
-    console.log("Parsed article content:", article)
-
-    if (!article) {
-      console.error("No article content provided")
-      return NextResponse.json({ error: "Article content is required" }, { status: 400 })
+    // Get the authorization header
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader?.startsWith('Bearer ')) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Step 1: Parse article to impacts object
+    // Get the token and verify it
+    const token = authHeader.split('Bearer ')[1]
+    const decodedToken = await getAuth().verifyIdToken(token)
+    const userId = decodedToken.uid
+
+    // Parse the request body
+    const { content } = await request.json()
+    if (!content) {
+      return Response.json({ error: "Content is required" }, { status: 400 })
+    }
+
     console.log("\n=== Step 1: Parsing article to impacts ===")
     let analysisData: AnalysisData
-    const hardcodedData = getHardcodedAnalysis(article)
+    const hardcodedData = getHardcodedAnalysis(content)
     console.log("Hardcoded data check result:", hardcodedData ? "Found" : "Not found")
     
     if (hardcodedData) {
@@ -179,103 +173,52 @@ export async function POST(request: Request) {
       analysisData = hardcodedData
     } else {
       console.log("Using OpenAI analysis")
-      analysisData = await analyzeWithOpenAI(article)
+      analysisData = await analyzeWithOpenAI(content)
     }
 
-    // Step 2: Store article and impacts in database
     console.log("\n=== Step 2: Storing in database ===")
-    
-    // Store article
     console.log("Storing article in Firestore...")
     try {
-      articleRef = await db.collection("articles").add({
+      // Store the article with user ID
+      const docRef = await db.collection("articles").add({
         title: analysisData.article_title,
-        content: article,
+        content: content,
+        url: analysisData.article_url,
+        userId: userId,
+        impacting_entity: analysisData.impacting_entity,
         created_at: new Date(),
         updated_at: new Date()
       })
-      console.log("Article stored successfully with ID:", articleRef.id)
+      articleRef = docRef
+      console.log("Article stored with ID:", articleRef.id)
+
+      // Store impacts using storeAnalysisData which includes URL filtering
+      await storeAnalysisData(articleRef.id, analysisData)
+      console.log("Impacts stored successfully with URL filtering")
+
+      // Store analysis history with user ID and article reference
+      await db.collection("analysis_history").add({
+        userId: userId,
+        articleId: articleRef.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        title: analysisData.article_title,
+        impactCount: analysisData.impacts.length
+      })
+      console.log("Analysis history stored successfully")
+
+      return Response.json({ 
+        success: true, 
+        articleId: articleRef.id,
+        analysis: {
+          ...analysisData,
+          id: articleRef.id
+        }
+      })
     } catch (error) {
       console.error("Failed to store article:", error)
       throw error
     }
-
-    // Store impacts
-    console.log("\nStoring impacts in Firestore...")
-    const impactsRef = db.collection("impacts")
-    console.log("Number of impacts to store:", analysisData.impacts.length)
-
-    try {
-      const impactPromises = analysisData.impacts.map(async (impact, index) => {
-        console.log(`\nStoring impact ${index + 1}/${analysisData.impacts.length}:`, {
-          entity: impact.impacted_entity,
-          score: impact.score,
-          evidenceCount: impact.supporting_evidence?.length || 0
-        })
-
-        // Create evidence documents first and collect their IDs
-        const evidenceIds = []
-        if (impact.supporting_evidence && impact.supporting_evidence.length > 0) {
-          console.log(`Creating ${impact.supporting_evidence.length} evidence documents for impact ${index + 1}`)
-          for (const evidence of impact.supporting_evidence) {
-            const evidenceRef = await db.collection("evidence").add({
-              description: evidence.description,
-              source_url: evidence.source_url || "",
-              source: evidence.source || "system",
-              created_at: new Date(),
-              updated_at: new Date()
-            })
-            evidenceIds.push(evidenceRef.id)
-            console.log(`Created evidence document with ID:`, evidenceRef.id)
-          }
-        }
-
-        // Create impact with evidence IDs array
-        const impactRef = await impactsRef.add({
-          article_id: articleRef!.id,
-          impacted_entity: impact.impacted_entity,
-          impact: impact.impact,
-          score: impact.score,
-          confidence: impact.confidence,
-          source: impact.source || "system",
-          user_votes_up: 0,
-          user_votes_down: 0,
-          supporting_evidence_ids: evidenceIds, // Store evidence IDs instead of full evidence objects
-          created_at: new Date(),
-          updated_at: new Date()
-        })
-        console.log(`Impact ${index + 1} stored with ID:`, impactRef.id)
-
-        return impactRef.id
-      })
-
-      const impactIds = await Promise.all(impactPromises)
-      console.log("\nAll impacts stored successfully. Impact IDs:", impactIds)
-    } catch (error) {
-      console.error("Failed to store impacts:", error)
-      throw error
-    }
-
-    // Step 3: Store analysis in history
-    console.log("\n=== Step 3: Storing analysis in history ===")
-    try {
-      // Just store the article ID in the history
-      const historyRef = await db.collection("analysis_history").add({
-        article_id: articleRef.id,
-        created_at: new Date()
-      })
-      console.log("Analysis history stored with ID:", historyRef.id)
-    } catch (error) {
-      console.error("Failed to store analysis history:", error)
-      throw error
-    }
-
-    console.log("\n=== Analysis completed successfully ===")
-    return NextResponse.json({ 
-      article_id: articleRef.id,
-      message: "Analysis completed successfully"
-    })
-
   } catch (error) {
     console.error("\n=== Analysis failed ===")
     console.error("Error details:", error)
@@ -291,7 +234,7 @@ export async function POST(request: Request) {
       }
     }
     
-    return NextResponse.json(
+    return Response.json(
       { 
         error: "Failed to analyze article", 
         details: error instanceof Error ? error.message : "Unknown error",
