@@ -1,0 +1,98 @@
+{
+  "article_title": "The Impact of AI in Healthcare",
+  "article_content": "Artificial Intelligence is revolutionizing healthcare through improved diagnostics, personalized treatment plans, and operational efficiency. However, concerns about data privacy, job displacement, and algorithmic bias remain significant challenges.",
+  "impacts": [
+    {
+      "impacted_entity": "Healthcare Providers",
+      "impact": "Improved diagnostic accuracy and treatment planning through AI-assisted analysis",
+      "score": 0.8,
+      "confidence": 0.9,
+      "supporting_evidence": [
+        {
+          "description": "AI systems can analyze medical images with accuracy comparable to human specialists",
+          "source": "system",
+          "source_url": ""
+        },
+        {
+          "description": "AI-powered predictive analytics help identify high-risk patients earlier",
+          "source": "system",
+          "source_url": ""
+        }
+      ],
+      "user_feedback": {
+        "thumbs_up": 0,
+        "thumbs_down": 0
+      },
+      "source": "system"
+    },
+    {
+      "impacted_entity": "Patients",
+      "impact": "More personalized and accessible healthcare services",
+      "score": 0.7,
+      "confidence": 0.85,
+      "supporting_evidence": [
+        {
+          "description": "AI chatbots provide 24/7 basic medical consultation",
+          "source": "system",
+          "source_url": ""
+        },
+        {
+          "description": "Personalized treatment recommendations based on individual health data",
+          "source": "system",
+          "source_url": ""
+        }
+      ],
+      "user_feedback": {
+        "thumbs_up": 0,
+        "thumbs_down": 0
+      },
+      "source": "system"
+    },
+    {
+      "impacted_entity": "Healthcare Workers",
+      "impact": "Potential job displacement and changing roles in healthcare",
+      "score": -0.3,
+      "confidence": 0.8,
+      "supporting_evidence": [
+        {
+          "description": "Some administrative and diagnostic tasks may be automated",
+          "source": "system",
+          "source_url": ""
+        },
+        {
+          "description": "Healthcare professionals need to adapt to working alongside AI systems",
+          "source": "system",
+          "source_url": ""
+        }
+      ],
+      "user_feedback": {
+        "thumbs_up": 0,
+        "thumbs_down": 0
+      },
+      "source": "system"
+    },
+    {
+      "impacted_entity": "Data Privacy",
+      "impact": "Increased risks to patient data security and privacy",
+      "score": -0.6,
+      "confidence": 0.9,
+      "supporting_evidence": [
+        {
+          "description": "Large amounts of sensitive health data required for AI training",
+          "source": "system",
+          "source_url": ""
+        },
+        {
+          "description": "Potential for data breaches and unauthorized access",
+          "source": "system",
+          "source_url": ""
+        }
+      ],
+      "user_feedback": {
+        "thumbs_up": 0,
+        "thumbs_down": 0
+      },
+      "source": "system"
+    }
+  ]
+} 

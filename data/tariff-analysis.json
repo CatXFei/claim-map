@@ -1,0 +1,98 @@
+{
+  "article_title": "Impact of Trade Tariffs on Global Economy",
+  "article_content": "Recent trade tariffs have significantly impacted global supply chains, consumer prices, and international trade relationships. While some domestic industries benefit from protection, the broader economic effects remain complex and far-reaching.",
+  "impacts": [
+    {
+      "impacted_entity": "Domestic Manufacturers",
+      "impact": "Increased protection from foreign competition and potential market share growth",
+      "score": 0.6,
+      "confidence": 0.85,
+      "supporting_evidence": [
+        {
+          "description": "Reduced competition from imported goods due to higher prices",
+          "source": "system",
+          "source_url": ""
+        },
+        {
+          "description": "Potential for increased domestic production and employment",
+          "source": "system",
+          "source_url": ""
+        }
+      ],
+      "user_feedback": {
+        "thumbs_up": 0,
+        "thumbs_down": 0
+      },
+      "source": "system"
+    },
+    {
+      "impacted_entity": "Consumers",
+      "impact": "Higher prices for imported goods and limited product choices",
+      "score": -0.7,
+      "confidence": 0.9,
+      "supporting_evidence": [
+        {
+          "description": "Increased costs passed on to consumers through higher retail prices",
+          "source": "system",
+          "source_url": ""
+        },
+        {
+          "description": "Reduced variety of available products in the market",
+          "source": "system",
+          "source_url": ""
+        }
+      ],
+      "user_feedback": {
+        "thumbs_up": 0,
+        "thumbs_down": 0
+      },
+      "source": "system"
+    },
+    {
+      "impacted_entity": "Global Supply Chains",
+      "impact": "Disruption of established trade patterns and increased operational costs",
+      "score": -0.5,
+      "confidence": 0.85,
+      "supporting_evidence": [
+        {
+          "description": "Companies forced to restructure supply chains to avoid tariffs",
+          "source": "system",
+          "source_url": ""
+        },
+        {
+          "description": "Increased complexity and costs in international trade operations",
+          "source": "system",
+          "source_url": ""
+        }
+      ],
+      "user_feedback": {
+        "thumbs_up": 0,
+        "thumbs_down": 0
+      },
+      "source": "system"
+    },
+    {
+      "impacted_entity": "International Relations",
+      "impact": "Strained trade relationships and potential trade wars",
+      "score": -0.8,
+      "confidence": 0.9,
+      "supporting_evidence": [
+        {
+          "description": "Retaliatory tariffs from trading partners",
+          "source": "system",
+          "source_url": ""
+        },
+        {
+          "description": "Increased political tensions between trading nations",
+          "source": "system",
+          "source_url": ""
+        }
+      ],
+      "user_feedback": {
+        "thumbs_up": 0,
+        "thumbs_down": 0
+      },
+      "source": "system"
+    }
+  ]
+} 
